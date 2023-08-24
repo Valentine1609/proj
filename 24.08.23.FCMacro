@@ -1,0 +1,294 @@
+import FreeCAD as App
+import Draft 
+import numpy as np
+import pandas as pd
+import math as m
+from numpy import genfromtxt
+import numpy as np
+
+def make_grid(grid_direction, dx, dy, initial_point_x, initial_point_y, piles_offset_dx, piles_offset_dy, n_piles_x, n_piles_y):
+	if grid_direction == "north-west":
+		direction_coeff_x = 1
+		direction_coeff_y = -1
+
+	elif grid_direction == "north-east":
+		direction_coeff_x = 1
+		direction_coeff_y = 1
+
+	elif grid_direction == "south-west":
+		direction_coeff_x = -1
+		direction_coeff_y = -1
+
+	elif grid_direction == "south-east":
+		direction_coeff_x = -1
+		direction_coeff_y = 1
+	else:
+		raise ValueError("Invalid grid_direction value")
+
+	x = np.linspace(initial_point_x, initial_point_x + dx * (n_piles_x - 1) * direction_coeff_x, n_piles_x)
+	y = np.linspace(initial_point_y, initial_point_y + dy * (n_piles_y - 1) * direction_coeff_y, n_piles_y)
+
+
+	xv, yv = np.meshgrid(x, y)
+	array = np.zeros((n_piles_x * n_piles_y, 2)) 
+	k = 0
+
+	for i in range(xv.shape[1]):
+		for j in range(xv.shape[0]):
+			X = xv[i, j]
+			Y = yv[i, j]
+			array[k, 0] = X
+			array[k, 1] = Y
+			k +=1
+	    
+	return array
+#grid purple
+#	pl=FreeCAD.Placement()
+#	A=np.zeros((dx-1,4))
+#	for i in range(dx):
+#		doc = App.activeDocument()	
+#		Line_grid_name='Line7'+str(i)
+#		Line_grid_name = doc.addObject("Part::Line",Line_grid_name)
+#		Line_grid_name.Y1 =x[dx-1-i-0]+10
+#		Line_grid_name.X1 =y[0]+100
+#		Line_grid_name.Y2 =x[dx-i-1-0-dy-0]+10
+#		Line_grid_name.X2 =y[dy-1-0]-60
+#		Line_grid_name2=App.activeDocument().copyObject(Line_grid_name)
+#		Draft.move([Line_grid_name2],FreeCAD.Vector(0,5,0))
+#		Draft.rotate([Line_grid_name2],90,pl.Base)	
+	#return (array)
+
+def arr_cross(x, y, index):
+	Line_cross='Line8'+str(index)
+	Line_cross2='Line9'+str(index)
+	doc = App.activeDocument()
+	Line_cross = doc.addObject("Part::Line",Line_cross)
+	Line_cross.X1 = 10 + x - 5 * pile_size
+	Line_cross.Y1 = 10 + y - 5 * pile_size
+	Line_cross.X2 = 10 + x + 5 * pile_size
+	Line_cross.Y2 = 10 + y + 5 * pile_size
+
+	Line_cross2 = doc.addObject("Part::Line",Line_cross2)
+	Line_cross2.X1 = 10 + x - 5 * pile_size
+	Line_cross2.Y1 = 10 + y + 5 * pile_size
+	Line_cross2.X2 = 10 + x + 5 * pile_size
+	Line_cross2.Y2 = 10 + y - 5 * pile_size
+	
+
+	FreeCAD.ActiveDocument.recompute()
+	return Line_cross,Line_cross2
+	line_array = [Line8, Line9]
+	for i in range(6):
+		Line8, Line9 = line_cross(0, 0, i)
+		line_array.append((Line8, Line9))
+	FreeCAD.ActiveDocument.recompute()
+
+def line_grid_up(dx,dy,index):
+	Line_up='Line11'+str(index)
+	doc = App.activeDocument()
+	Line_up = doc.addObject("Part::Line",Line_up)
+	Line_up.X1 =-66-dx+51
+	Line_up.Y1 =151
+	Line_up.X2 =-34.25
+	Line_up.Y2 =151
+	FreeCAD.ActiveDocument.recompute()
+	return(Line_up)
+	line_upp = [Line11]
+	for i in range(5):
+		Line11=line_upp(0, 0, i)
+		line_upp.append((Line11))
+	FreeCAD.ActiveDocument.recompute()
+
+def line_grid_left(dx,dy,index):
+	Line_left='Line12'+str(index)
+	doc = App.activeDocument()
+	Line_left = doc.addObject("Part::Line",Line_left)
+	Line_left.X1 =-136
+	Line_left.Y1 =61+dy-51
+	Line_left.X2 =-136
+	Line_left.Y2 =30
+	FreeCAD.ActiveDocument.recompute()
+	return(Line_left)
+	Line_leftt = [Line12]
+	for i in range(5):
+		Line12=Line_leftt(0, 0, i)
+		Line_leftt.append((Line12))
+	FreeCAD.ActiveDocument.recompute()
+
+def txt_line_size(dx,dy,index):
+	t3_name='t3'+str(index)
+	t4_name='t4'+str(index)
+	t3 = "5"
+	p3 = App.Vector(25+dx, 151)
+	
+	t4 = "5"
+	p4 = App.Vector(dx-8,136)
+	
+	t3_name = Draft.make_text(t3, p3)
+	t4_name = Draft.make_text(t4, p4)
+	t3_name.ViewObject.FontSize = 0.005
+	t4_name.ViewObject.FontSize = 0.005
+	angle1 = 90
+	rot1 = Draft.rotate(t4_name, angle1, copy=False)	
+	return(t3, t4)
+	txt_array = [t3, t4]
+	for i in range(dx):
+		t3, t4 = text(0, 0, i)
+		txt_array.append((t3, t4))
+	FreeCAD.ActiveDocument.recompute()
+
+def arrow_func(x,y,dx,dy,index,pile_size):
+	cirlce_name='Circle'+str(index)
+	Line1_name='Line1'+str(index)
+	Line2_name='Line2'+str(index)
+	Line3_name='Line3'+str(index)
+	group_name='Group'+str(index)
+	group_name2='Group2'+str(index)
+	group_name3='Group3'+str(index)
+	Line4_name='Line4'+str(index)
+	Line5_name='Line5'+str(index)
+	Line6_name='Line6'+str(index)
+	t_name='t1'+str(index)
+	t2_name='t2'+str(index)
+	p_vector='p1'+str(index)
+	p2_vector='p2'+str(index)
+	rec_name = 'Rectangle'+str(index)
+	#прямоугольник
+	pl = FreeCAD.Placement()
+	pl.Base = FreeCAD.Vector(10-5*pile_size, 10-5*pile_size)
+	rec_name = Draft.make_rectangle(10*pile_size, 10*pile_size, placement=pl, face=False, support=None)
+	rec_name.Label='Rectangle'+str(index)
+
+	#Свая1
+	pl=FreeCAD.Placement()
+	pl.Base=FreeCAD.Vector(10,10, 0)
+	cirlce_name = Draft.make_circle(radius=5*pile_size, placement=pl, face=False, support=None)
+	cirlce_name.Label='Circle'+str(index)
+
+	#стрелка1
+	doc = App.activeDocument()
+	Line1_name = doc.addObject("Part::Line",Line1_name)
+	Line1_name.X1 = 10
+	Line1_name.Y1 = 10
+	Line1_name.X2 = 10 + (8 - 0.18 * pile_size) * pile_size
+	Line1_name.Y2 = 10
+       
+	Line2_name = doc.addObject("Part::Line", Line2_name)
+	Line2_name.X1 = 18 * pile_size
+	Line2_name.Y1 = 10
+	Line2_name.X2 = (18 - 1.8) * pile_size
+	Line2_name.Y2 = 10 + 0.5 * pile_size
+	    
+	Line3_name = doc.addObject("Part::Line", Line3_name)
+	Line3_name.X1 = 18 * pile_size
+	Line3_name.Y1 = 10
+	Line3_name.X2 = (18 - 1.8) * pile_size
+	Line3_name.Y2 = 10 - 0.5 * pile_size
+
+	Line4_name=App.activeDocument().copyObject(Line1_name)
+	Line5_name=App.activeDocument().copyObject(Line2_name)
+	Line6_name=App.activeDocument().copyObject(Line3_name)
+
+	p1 = App.Vector(9, 10)
+	t_name = Draft.make_text(str(abs(dy)), p1)
+	t_name.ViewObject.FontSize = 0.0030*pile_size
+		
+	p2 = App.Vector(10, 9)
+	t2_name = Draft.make_text(str(abs(dx)), p2)
+	t2_name.ViewObject.FontSize = 0.0030*pile_size
+	
+	group_name = App.ActiveDocument.addObject("App::DocumentObjectGroup", group_name)
+	group_name.addObjects([cirlce_name,Line1_name, Line2_name, Line3_name,Line4_name,Line5_name,Line6_name,t_name,t2_name,rec_name])
+	group_name2 = App.ActiveDocument.addObject("App::DocumentObjectGroup", group_name2)
+	group_name2.addObjects([Line4_name, Line5_name, Line6_name,t2_name])
+	group_name3 = App.ActiveDocument.addObject("App::DocumentObjectGroup", group_name3)
+	group_name3.addObjects([cirlce_name,group_name,group_name2])
+	
+	if dx>0: 
+		Draft.rotate([Line4_name,Line5_name,Line6_name],90,pl.Base)
+		Draft.move([t2_name],FreeCAD.Vector(0,10*pile_size,0))
+	elif dx<0: 
+		Draft.rotate([Line4_name,Line5_name,Line6_name],270,pl.Base)
+		Draft.move([t2_name],FreeCAD.Vector(0,-10*pile_size,0))
+	elif dx==0:
+		Draft.rotate([Line4_name,Line5_name,Line6_name],90,pl.Base)
+		Draft.move([t2_name],FreeCAD.Vector(0,-10*pile_size,0))
+	if dy>0:
+		Draft.rotate([Line1_name,Line2_name,Line3_name],360,pl.Base)
+		Draft.move([t_name],FreeCAD.Vector(17*pile_size,0,0))
+	elif dy<0:
+		Draft.rotate([Line1_name,Line2_name,Line3_name],180,pl.Base)
+		Draft.move([t_name],FreeCAD.Vector(-12*pile_size,0,0))
+	elif dy==0:
+		Draft.rotate([Line1_name,Line2_name,Line3_name],180,pl.Base)
+		Draft.move([t_name],FreeCAD.Vector(-12*pile_size,0,0))
+
+
+	Draft.move(group_name.OutList,FreeCAD.Vector(x,y,0),copy=False)
+	Draft.move(group_name2.OutList,FreeCAD.Vector(x,y,0),copy=False)
+	Draft.move(group_name3.OutList,FreeCAD.Vector(x,y,0),copy=False)
+	
+	FreeCAD.ActiveDocument.recompute()
+
+#начальная точка
+initial_point_x=5
+initial_point_y=0
+#Шаг
+dx=50
+dy=50
+#Количество свай по оси Х и Y
+n_piles_x=5
+n_piles_y=5
+grid_direction="north-east"
+piles_offset_dx=0
+piles_offset_dy=0
+pile_size=3
+# делаем сетку по ДС
+grid=make_grid(grid_direction, dx,dy, initial_point_x, initial_point_y, piles_offset_dx, piles_offset_dy, n_piles_x, n_piles_y)
+deviations=np.zeros((grid.shape[0],2))
+
+#импортируем файл с "измерениями"
+
+f = open("C:/Users/Julian/Desktop/qq.csv")
+
+arr = np.genfromtxt("C:/Users/Julian/Desktop/qq.csv", delimiter=";",dtype=None)
+#вычисляем отклонения
+
+for i in range(grid.shape[0]):
+	dev_x = arr[:, 0] - grid[i, 0]
+	dev_y = arr[:, 1] - grid[i,1]
+	dev_xy = dev_x ** 2 + dev_y ** 2 
+	index_min=np.argmin(dev_xy)
+	deviations[i,0]=dev_x[index_min]
+	deviations[i,1]=dev_y[index_min]
+print('grid=',grid)
+print('gridx=',grid[0,0])
+print('gridy=',grid[0,1])
+print('devx=',dev_x)
+print('devy=',dev_y)
+#print('arr=',arr)
+print('arrx=',arr[:, 0])
+print('arry=',arr[:, 1])
+print('deviationsx=',deviations[:,0])
+print('deviationsy=',deviations[:,1])
+print('dev_xy=',dev_xy)
+deviations=np.round(deviations,1)*1000
+grid2=grid*pile_size
+for i in range(grid.shape[0]):
+	arrow_func(grid2[i,0],grid2[i,1],deviations[i,0],deviations[i,1],i,pile_size)
+	#rec1(grid[i,0],grid[i,1],i,pile_size)
+	arr_cross(grid2[i,0],grid2[i,1],i)
+	#txt_line_size(grid[i,0],grid[i,1],i)
+	#line_grid_up(grid[i,0],grid[i,1],i)
+	#line_grid_left(grid[i,0],grid[i,1],i)
+
+#	arr_cross(grid[i, 0], grid[i, 1], i)
+#	dev_x_text = Draft.make_text("dev_x: {:.3f}".format(deviations[i, 0]), App.Vector(grid[i, 0], grid[i, 1] + 5))
+#	dev_y_text = Draft.make_text("dev_y: {:.3f}".format(deviations[i, 1]), App.Vector(grid[i, 0], grid[i, 1] - 5))
+#	
+#	    # Настройка размеров и стилей шрифта
+#	dev_x_text.ViewObject.FontSize = 0.005 * pile_size
+#	dev_y_text.ViewObject.FontSize = 0.005 * pile_size
+#
+#	Draft.move([dev_x_text, dev_y_text], FreeCAD.Vector(-13 -11), copy=False)
+
