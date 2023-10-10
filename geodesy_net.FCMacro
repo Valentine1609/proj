@@ -1,0 +1,156 @@
+import FreeCAD as App
+import Draft 
+import numpy as np
+import pandas as pd
+import math as m
+from numpy import genfromtxt
+import numpy as np
+import Part
+import FreeCAD as App
+import Part
+from pathlib import Path
+
+
+#Импорт CSV
+doc = App.activeDocument()
+csv_grid = Path("C:/Users/labki/OneDrive/Рабочий стол/FreeCAD/net.csv")
+df = pd.read_csv(csv_grid.resolve(), sep=';')
+
+#print(df.iloc[0])
+x_coords = df['x']
+y_coords = df['y']
+z_coords = df['z']
+types = df['Type']
+Name = df['Names']
+# Создание точек и линии
+lines_list = [    
+	(1, 2),
+    (2, 3),
+    (3, 4),
+    (4, 5),
+    (5, 6),
+    (6, 7),
+    (7, 1),
+    (7, 8),
+    (8, 9),
+    (9, 7),
+    (11, 13),
+    (11, 10),
+    (10, 12),
+    (12, 13),
+    (8, 5),
+    (1, 11),
+    (10, 3),
+    (10, 4),
+    (12, 5),
+    (9, 2),
+    (11, 9),
+    (9, 3),
+    (8, 6),
+    (13, 6),
+    (8, 4)
+]
+
+
+for line in lines_list:
+	i = 1
+	for point in line: 
+		if i == 1:
+			indx = df.index[df["Names"] == point]
+			point1 = App.Vector(df['x'][indx], df['y'][indx], df['z'][indx])
+			i = 0
+		else:
+			indx = df.index[df["Names"] == point]        
+			point2 = App.Vector(df['x'][indx], df['y'][indx], df['z'][indx])
+			i = 1
+
+	line = Draft.make_line(point1, point2)
+
+
+
+rectangles = []
+for i in range(len(x_coords)):
+	if types[i] == "karkas":
+		pl = App.Placement()
+		pl.Base = App.Vector(x_coords[i], y_coords[i],z_coords[i])
+		rectangle = Draft.make_rectangle(0.05, -0.05, placement=pl, face=False, support=None)
+		rectangles.append(rectangle)
+
+Draft.move(rectangles, App.Vector(-0.025, 0.025, 0.0), copy=False)
+
+for i in range(len(x_coords)):
+	if types[i] == "core":
+		pl = FreeCAD.Placement()
+		pl.Rotation.Q = (90.0, 90.0, 0.0, 0.0)
+		pl.Base = FreeCAD.Vector(x_coords[i], y_coords[i],z_coords[i])
+		pol = Draft.make_polygon(3, radius=0.04, inscribed=True, placement=pl, face=False, support=None)
+		Draft.autogroup(pol)
+		
+		FreeCAD.ActiveDocument.recompute()
+
+for i in range(len(x_coords)):
+	if types[i] == "SGGS":
+		pl = FreeCAD.Placement()
+		pl.Rotation.Q = (90.0, 90.0, 0.0, 0.0)
+		pl.Base = FreeCAD.Vector(x_coords[i], y_coords[i],z_coords[i])
+		circle = Draft.make_circle(radius=0.03, placement=pl, face=False, support=None)
+		Draft.autogroup(circle)
+		
+		FreeCAD.ActiveDocument.recompute()
+doc.recompute()
+for i in range(len(x_coords)):
+	if Name[i] != "Names":  # Пропуск первой строки с заголовками
+		t = [str(Name[i])]  # Список с текстом для подписи
+		p = App.Vector(x_coords[i], y_coords[i], z_coords[i])  # Координаты для подписи
+		place = App.Placement(p, App.Rotation())
+		text = Draft.make_text(t, place)
+		text.ViewObject.FontSize = 0.00005  # Установка размера шрифта
+		Draft.move(text, App.Vector(0.03,0, 0.0), copy=False)
+for i in range(len(x_coords)):
+	if Name[i] != "Names":  
+		pl=FreeCAD.Placement()
+		pl.Base=FreeCAD.Vector(x_coords[i], y_coords[i], z_coords[i])
+		circle = Draft.make_circle(radius=0.009, placement=pl, face=True, support=None)
+		Draft.autogroup(circle)
+
+#Legend
+#Пункты каркасной сетки
+pl = FreeCAD.Placement()
+pl.Base = FreeCAD.Vector(x_coords[i] + 1.25, y_coords[i] , z_coords[i])
+rec = Draft.make_rectangle(length=0.05, height=0.05, placement=pl, face=False, support=None)
+pl=FreeCAD.Placement()
+Draft.autogroup(rec)
+pl.Base=FreeCAD.Vector(x_coords[i] + 1.275, y_coords[i]+ 0.025, z_coords[i])
+circle = Draft.make_circle(radius=0.009, placement=pl, face=True, support=None)
+Draft.autogroup(circle)
+# Создайте текстовый объект
+text = Draft.makeText("- Пункты каркасной сетки", App.Vector(x_coords[i] + 1.32, y_coords[i] + 0.01, z_coords[i]))
+text.ViewObject.FontSize = 0.00005  # Размер шрифта
+
+#Исходные пункты
+pl = FreeCAD.Placement()
+pl.Rotation.Q = (90.0, 90.0, 0.0, 0.0)
+pl.Base = FreeCAD.Vector(x_coords[i] + 1.272, y_coords[i] - 0.08 , z_coords[i])
+pol = Draft.make_polygon(3, radius=0.04, inscribed=True, placement=pl, face=False, support=None)
+Draft.autogroup(pol)
+pl.Base=FreeCAD.Vector(x_coords[i] + 1.272, y_coords[i] - 0.08, z_coords[i])
+circle = Draft.make_circle(radius=0.009, placement=pl, face=True, support=None)
+Draft.autogroup(circle)
+# Создайте текстовый объект
+text = Draft.makeText("- Исходные пункты", App.Vector(x_coords[i] + 1.32, y_coords[i] - 0.09, z_coords[i]))
+text.ViewObject.FontSize = 0.00005  # Размер шрифта
+
+#Пункты СГГС
+pl=FreeCAD.Placement()
+pl.Base=FreeCAD.Vector(x_coords[i] + 1.27, y_coords[i] - 0.16, z_coords[i])
+circle = Draft.make_circle(radius=0.03, placement=pl, face=False, support=None)
+Draft.autogroup(circle)
+pl=FreeCAD.Placement()
+pl.Base=FreeCAD.Vector(x_coords[i] + 1.27, y_coords[i] - 0.16, z_coords[i])
+circle = Draft.make_circle(radius=0.009, placement=pl, face=True, support=None)
+Draft.autogroup(circle)
+# Создайте текстовый объект
+text = Draft.makeText("- Пункты СГГС", App.Vector(x_coords[i] + 1.32, y_coords[i] - 0.175, z_coords[i]))
+text.ViewObject.FontSize = 0.00005  # Размер шрифта
+App.ActiveDocument.recompute()
+doc.recompute()
