@@ -2,78 +2,74 @@ import os
 import re
 import pandas as pd
 import numpy as np
-from scipy.spatial import Delaunay
+import math
+from scipy.spatial import Delaunay, KDTree
 import FreeCAD, FreeCADGui
 import Draft
 import shutil
 import Part
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton, QFileDialog, QTextEdit
-from PyQt5.QtGui import QFont
+from PySide2.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QLineEdit, QComboBox, QSpinBox, QCheckBox, QPushButton, QFileDialog, QTextEdit
+from PySide2.QtGui import QFont
+
 
 class MyWindow(QDialog):
     def __init__(self):
         super().__init__()
 
-        date_regex = re.compile(r'^\d{4}-\d{2}-\d{2}$')
-        self.start_date = None
-        self.interval = None
-        self.num_periods = None
-        self.periods_in_year = None
-        self.points_amount = None
-        self.gen_method = None
-        self.date_list = None
-        self.gen_radius = None
-        self.min_distance = None
-        self.max_distance = None
+        self.points_amount = None  # кол-во пунктов
+        self.gen_method = None     # метод генерации
+        self.gen_radius = None     # Радиус генерации (относительно стартового пункта)
+        self.min_distance = None   # Минимальное расстояние между пунктами
+        self.max_distance = None   # Максимальное расстояние между пунктами
+        self.reference_coords_X = None
+        self.reference_coords_Y = None
 
-        self.temp_file_xyz_name = ''
-        self.script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.data_dir = os.path.join(self.script_dir, "Data")
-
-        if not os.path.exists(self.data_dir):
-            os.makedirs(self.data_dir)
+        self.temp_file_name = ''  # Переменные для хранения имен временных файлов
+		
+        folder_name = 'Data'  # Папка для временных файлов и сохранения
+       	
+        if not os.path.exists(folder_name):  # Проверяем наличие папки Data
+            os.makedirs(folder_name)
+        else:
+            self.script_dir = os.path.dirname(os.path.abspath(__file__))  # Определяем расположение директории
+            self.data_dir = os.path.join(self.script_dir, 'Data')         # Определяем расположения папки для файлов
 
         self.createUI()
+
 
     def createUI(self):
         layout = QVBoxLayout()
 
         form_layout = QFormLayout()
 
-        self.num_periods_input = QLineEdit()
-        self.start_date_input = QLineEdit()
-        self.interval_input = QComboBox()
-        self.interval_input.addItems(['W', 'D'])
         self.points_spinbox = QSpinBox()
         self.points_spinbox.setRange(3, 100)
         self.points_spinbox.setSingleStep(1)
         self.points_spinbox.setValue(10)
-        self.method_input = QComboBox()
-        self.method_input.addItems(['centralized', 'consistent'])
-        self.gen_radius_input = QLineEdit()
-        self.min_distance_input = QLineEdit()
-        self.max_distance_input = QLineEdit()
+        #self.method_input = QComboBox()
+        #self.method_input.addItems(['centralized', 'consistent', 'radial'])
+        #self.gen_radius_input = QLineEdit()
+        #self.gen_radius_input.setText('1000000')
 
-        form_layout.addRow('Num of periods:', self.num_periods_input)
-        form_layout.addRow('Start date:', self.start_date_input)
-        form_layout.addRow('Interval(week/day):', self.interval_input)
+        self.reference_coords_X_textbox = QLineEdit()
+        self.reference_coords_X_textbox.setText('10')
+        self.reference_coords_Y_textbox = QLineEdit()
+        self.reference_coords_Y_textbox.setText('10')
+
+        self.min_distance_input = QLineEdit()
+        self.min_distance_input.setText('10000')
+        self.max_distance_input = QLineEdit()
+        self.max_distance_input.setText('20000')
+
         form_layout.addRow('Num of points:', self.points_spinbox)
-        form_layout.addRow('Generation method:', self.method_input)
-        form_layout.addRow('Gen radius (deg):', self.gen_radius_input)
+        #form_layout.addRow('Generation method:', self.method_input)
+        #form_layout.addRow('Gen radius (deg):', self.gen_radius_input)
         form_layout.addRow('Min distance (m):', self.min_distance_input)
         form_layout.addRow('Max distance (m):', self.max_distance_input)
+        form_layout.addRow('Reference coordinate X:', self.reference_coords_X_textbox)
+        form_layout.addRow('Reference coordinate Y:', self.reference_coords_Y_textbox)
 
         layout.addLayout(form_layout)
-
-        self.harmonics_checkbox = QCheckBox('Harmonics')
-        self.linear_trend_checkbox = QCheckBox('Linear trend')
-        self.noise_checkbox = QCheckBox('Noise')
-        self.impulse_checkbox = QCheckBox('Impulse(random)')
-
-        layout.addWidget(self.harmonics_checkbox)
-        layout.addWidget(self.linear_trend_checkbox)
-        layout.addWidget(self.noise_checkbox)
-        layout.addWidget(self.impulse_checkbox)
 
         self.create_button = QPushButton('Create')
         self.create_button.clicked.connect(self.btn1_press)
@@ -98,7 +94,7 @@ class MyWindow(QDialog):
 
         self.setLayout(layout)
         self.setWindowTitle('Synthetic TimeSeries data app')
-        self.showMaximized()
+    
 
     def load_csv_file(self):
         options = QFileDialog.Options()
@@ -109,126 +105,190 @@ class MyWindow(QDialog):
 
     def btn1_press(self):
         self.command_line.append('Creating model...')
-        date_regex = re.compile(r'^\d{4}-\d{2}-\d{2}$')
-
-        if self.num_periods_input.text().isdigit():
-            self.num_periods = int(self.num_periods_input.text())
-            if self.num_periods < 1:
-                self.command_line.append('Incorrect number of periods')
-                return
-        else:
-            self.command_line.append('Incorrect number of periods')
-            return
-
-        self.start_date = self.start_date_input.text()
-        if not date_regex.match(self.start_date):
-            self.command_line.append('Incorrect date format')
-            return
-
-        self.interval = self.interval_input.currentText()
-        if self.interval == 'W':
-            self.periods_in_year = 52
-        if self.interval == 'D':
-            self.periods_in_year = 365
-
-        self.date_list = pd.date_range(start=self.start_date, periods=self.num_periods, freq=self.interval)
+        
         self.points_amount = self.points_spinbox.value()
-        self.gen_method = self.method_input.currentText()
-        self.gen_radius = float(self.gen_radius_input.text())
+        #self.gen_method = self.method_input.currentText()
+        #self.gen_radius = float(self.gen_radius_input.text())
         self.min_distance = int(self.min_distance_input.text())
         self.max_distance = int(self.max_distance_input.text())
+        self.reference_coords_X = float(self.reference_coords_X_textbox.text())
+        self.reference_coords_Y = float(self.reference_coords_Y_textbox.text())
 
-        points = self.create_random_points()
+        points = self.create_random_points(self.gen_method)
         self.generate_time_series(points)
 
         self.command_line.append("Model created")
 
-    def create_random_points(self):
-        ref_lat = 55.0084
-        ref_lon = 82.9357
 
-        points = []
-        for i in range(self.points_amount):
-            lat = np.random.uniform(ref_lat - self.gen_radius, ref_lat + self.gen_radius)
-            lon = np.random.uniform(ref_lon - self.gen_radius, ref_lon + self.gen_radius)
-            points.append((lat, lon))
+    def create_random_points(self, method):
+	
+        if self.min_distance > self.max_distance:
+            raise ValueError("Minimum distance cannot be greater than maximum distance")
+
+        
+        start_point = (self.reference_coords_X , self.reference_coords_Y)
+        points = [start_point]
+	        
+        while len(points) < self.points_amount:
+	        # Generate a random direction (angle in radians)
+            direction = np.random.uniform(0, 2 * math.pi)
+
+            # Generate a random distance within the specified range
+            distance = np.random.uniform(self.min_distance, self.max_distance)
+
+            # Calculate the new point's coordinates
+            prev_x, prev_y = points[-1]
+            x = prev_x + distance * math.cos(direction)
+            y = prev_y + distance * math.sin(direction)
+
+            point = (x, y)
+            '''
+            x = np.random.uniform(self.reference_coords_X - self.gen_radius, self.reference_coords_X + self.gen_radius)
+            y = np.random.uniform(self.reference_coords_Y - self.gen_radius, self.reference_coords_Y + self.gen_radius)
+            point = (x, y)
+            '''
+	        # Build a KD tree from the Cartesian coordinates
+            tree = KDTree(points)
+
+            if len(points) < 2:
+                neighbours = 1
+            else:
+                neighbours = 2
+
+            # Find the nearest point to the new point
+            dist, idx = tree.query((x, y), k=neighbours)
+ 
+            #geod_dist = self.calculate_distance()
+
+            # Check if the distance is within the desired range
+            if np.all(self.min_distance <= dist) and np.all(dist <= self.max_distance):
+                # Add new point to list
+                points.append(point)
+                '''
+                if method == 'consistent':
+                    start_point = point
+                elif method == 'centralized':
+                    pass
+                '''
         return points
+
+        '''
+        if method == 'radial':
+            points = []
+            points.append((self.reference_coords_X , self.reference_coords_Y ))
+
+            for i in range(1, self.points_amount):
+                # Generate a random direction (angle in radians)
+                direction = np.random.uniform(0, 2 * math.pi)
+
+                # Generate a random distance within the specified range
+                distance = np.random.uniform(self.min_distance, self.max_distance)
+
+                # Calculate the new point's coordinates
+                prev_x, prev_y = points[-1]
+                new_x = prev_x + distance * math.cos(direction)
+                new_y = prev_y + distance * math.sin(direction)
+
+                points.append((new_x, new_y))
+
+            return points
+         '''
 
     def generate_time_series(self, points):
         data = []
-        station_names = ['Station A', 'Station B', 'Station C', 'Station D', 'Station E']
 
         for i, point in enumerate(points):
-            lat, lon = point
-            station_name = station_names[i % len(station_names)]
+            X, Y = point
+            station_name = ''.join(np.random.choice(list('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 4))
 
-            for date in self.date_list:
-                height = np.random.uniform(0, 100)
+            height = np.random.uniform(0, 100)
 
-                if self.harmonics_checkbox.isChecked():
-                    height += 10 * np.sin(2 * np.pi + date.dayofyear / 365)
-
-                if self.linear_trend_checkbox.isChecked():
-                    height += 0.2 * date.dayofyear
-
-                if self.noise_checkbox.isChecked():
-                    height += np.random.normal(0, 5)
-
-                if self.impulse_checkbox.isChecked():
-                    if np.random.rand() < 0.05:
-                        height += np.random.uniform(10, 20)
-
-                data.append({
-                    'Date': date,
-                    'Station': station_name,
-                    'Latitude': lat,
-                    'Longitude': lon,
-                    'Height': height
-                    
-                })
+            data.append({'Station': station_name,
+                         'X': X,
+                         'Y': Y,
+                         'Height': height})
 
         df = pd.DataFrame(data)
-        self.temp_file_xyz_name = os.path.join(self.data_dir, 'temp_xyz.csv')
-        df.to_csv(self.temp_file_xyz_name, sep=';', index=False)
+        self.temp_file_name = os.path.join(self.data_dir, 'temp.csv')
+        df.to_csv(self.temp_file_name, sep=';', index=False)
 
-        self.command_line.append(f"Time series generated and saved to file: {self.temp_file_xyz_name}")
+        self.command_line.append(f"Time series generated and saved to file: {self.temp_file_name}")
+
 
     def btn2_press(self):
         try:
-            if not self.temp_file_xyz_name:
+            if not self.temp_file_name:
                 self.command_line.append("No CSV file loaded. Please load a CSV file first.")
                 return
 
             doc = FreeCAD.newDocument("NetworkMap")
-            data = pd.read_csv(self.temp_file_xyz_name, delimiter=';')
+            data = pd.read_csv(self.temp_file_name, delimiter=';')
 
-            points = np.array(data[['Longitude', 'Latitude']])
+            points = np.array(data[['X', 'Y']])
             labels = data['Station'].astype(str).values
+            
+            max_vector_length = self.max_distance  # adjust this value to set the maximum vector length
 
             tri = Delaunay(points)
+            edges = set()
+            # получаем все ребра треугольников и добавляем их в множество edges
+            for n in range(tri.nsimplex):
+                simplex = tri.simplices[n]
+                for i in range(3):
+                    for j in range(i, 3):
+                        if i != j:
+                            edges.add((simplex[i], simplex[j]))
 
-            for simplex in tri.simplices:
-                point1 = points[simplex[0]]
-                point2 = points[simplex[1]]
-                point3 = points[simplex[2]]
-                polygon = Part.makePolygon([FreeCAD.Vector(point1[0], point1[1], 0),
-                                            FreeCAD.Vector(point2[0], point2[1], 0),
-                                            FreeCAD.Vector(point3[0], point3[1], 0),
-                                            FreeCAD.Vector(point1[0], point1[1], 0)])
-                Part.show(polygon)
+            # рисуем ребра треугольников на графике и добавляем текст с длиной линий
+            edge_labels = set()
+            for edge in edges:
+                x1, y1 = data.iloc[edge[0]][['X', 'Y']]
+                x2, y2 = data.iloc[edge[1]][['X', 'Y']]
+                length = self.calculate_distance(x1, y1, x2, y2)
+                if length <= max_vector_length:  # проверяем длину линии
+                    label = f'{length:.0f} m'
+                    edge_labels.add((min(edge), max(edge), label))
+                    point_1 = FreeCAD.Vector(x1, y1, 0)
+                    point_2 = FreeCAD.Vector(x2, y2, 0)
+                    line = Draft.makeLine(point_1, point_2)
+                    doc.recompute()
+            
+            # рисуем текст с информацией о длинах линий
+            for label in edge_labels:
+                edge = label[:2]
+                label_text = label[2]
+                x1, y1 = data.iloc[edge[0]][['X', 'Y']]
+                x2, y2 = data.iloc[edge[1]][['X', 'Y']]
+                label_x = (x1 + x2) / 2
+                label_y = (y1 + y2) / 2
+                rotation = np.rad2deg(np.arctan2(y2 - y1, x2 - x1))
+                if rotation > 90:
+                    rotation -= 180
+                elif rotation < -90:
+                    rotation += 180
+                
+                midpoint = ((x1 + x2) / 2, (y1 + y2) / 2)
+                text_obj = Draft.make_text(label_text, FreeCAD.Vector(*midpoint))
+                text_obj.Placement = FreeCAD.Placement(FreeCAD.Vector(*midpoint), FreeCAD.Rotation(rotation, 0, 0))
+                if text_obj is not None:
+                    text_obj.ViewObject.FontSize = 1000
 
+            # рисуем текст названий пунктов
             for i, point in enumerate(points):
                 label = labels[i]
+                
                 offset = FreeCAD.Vector(0.01, 0.01, 0)
                 text_position = FreeCAD.Vector(point[0], point[1], 0) + offset
                 text = Draft.make_text([label], text_position)
+         
                 if text is not None:
-                    text.ViewObject.FontSize = 0.00001
+                    text.ViewObject.FontSize = 1500  # Размер шрифта названий пунктов
 
             FreeCADGui.activeDocument().activeView().viewAxometric()
             FreeCADGui.SendMsgToActiveView("ViewFit")
         except Exception as e:
             self.command_line.append(f'Error generating network map: {e}')
+
 
     def btn3_press(self):
         try:
@@ -238,6 +298,10 @@ class MyWindow(QDialog):
                 self.command_line.append("File saved.")
         except Exception as e:
             self.command_line.append(f'Error saving file: {e}')
+
+
+    def calculate_distance(self, x1, y1, x2, y2):
+        return math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
 
 if __name__ == '__main__':
